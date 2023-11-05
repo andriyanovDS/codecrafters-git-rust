@@ -5,7 +5,7 @@ use sha1::{Digest, Sha1};
 use std::{
     fs,
     io::{Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 #[derive(Parser, Debug)]
@@ -62,7 +62,7 @@ fn main() -> Result<()> {
             object_file.extend("blob".as_bytes());
             object_file.push(b' ');
             object_file.extend(file_len.len().to_string().as_bytes());
-            object_file.push(0x0);
+            object_file.push(b'\x00');
             let mut buf_reader = std::io::BufReader::new(file);
             buf_reader.read_to_end(&mut object_file)?;
 
@@ -70,9 +70,15 @@ fn main() -> Result<()> {
             hasher.update(&object_file);
             let hash = hex::encode(hasher.finalize());
             if write {
-                let file_path = format!(".git/objects/{}/{}", &hash[0..2], &hash[2..]);
+                let directory = format!(".git/objects/{}", &hash[0..2]);
+                let file_path = format!("{}/{}", directory, &hash[2..]);
+                let directory_path = Path::new(directory.as_str());
+                if !directory_path.exists() {
+                    std::fs::create_dir(directory_path)?;
+                }
                 let file = std::fs::File::create(&file_path)?;
-                let encoder = flate2::write::ZlibEncoder::new(file, Compression::default());
+                let mut encoder = flate2::write::ZlibEncoder::new(file, Compression::none());
+                encoder.write_all(&object_file)?;
                 encoder.finish()?;
             }
             println!("{hash}");
