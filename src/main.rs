@@ -35,9 +35,14 @@ fn main() -> Result<()> {
             let file_path = format!(".git/objects/{}/{}", directory, file_name);
             let file_content = fs::read(&file_path)?;
             let mut decoder = flate2::read::ZlibDecoder::new(file_content.as_slice());
+
             let mut result = String::new();
             decoder.read_to_string(&mut result)?;
-            print!("{}", result);
+            let contect_start_index = result
+                .chars()
+                .position(|c| c as u8 == 0x0)
+                .expect("null separator missed");
+            print!("{}", &result[contect_start_index + 1..]);
         }
     }
     Ok(())
