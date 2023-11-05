@@ -7,6 +7,9 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
 };
+use tree_object::parse_tree_object;
+
+mod tree_object;
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -28,6 +31,11 @@ enum Command {
         write: bool,
         file_path: PathBuf,
     },
+    LsTree {
+        #[arg(long("name-only"))]
+        name_only: bool,
+        hash: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -44,7 +52,7 @@ fn main() -> Result<()> {
             let directory = &hash[0..2];
             let file_name = &hash[2..];
             let file_path = format!(".git/objects/{}/{}", directory, file_name);
-            let file_content = fs::read(&file_path)?;
+            let file_content = fs::read(file_path)?;
             let mut decoder = flate2::read::ZlibDecoder::new(file_content.as_slice());
 
             let mut result = String::new();
@@ -76,12 +84,31 @@ fn main() -> Result<()> {
                 if !directory_path.exists() {
                     std::fs::create_dir(directory_path)?;
                 }
-                let file = std::fs::File::create(&file_path)?;
+                let file = std::fs::File::create(file_path)?;
                 let mut encoder = flate2::write::ZlibEncoder::new(file, Compression::none());
                 encoder.write_all(&object_file)?;
                 encoder.finish()?;
             }
             println!("{hash}");
+        }
+        Command::LsTree { name_only, hash } => {
+            let directory = &hash[0..2];
+            let file_name = &hash[2..];
+            let file_path = format!(".git/objects/{}/{}", directory, file_name);
+            let file_content = fs::read(&file_path)?;
+            let mut decoder = flate2::read::ZlibDecoder::new(file_content.as_slice());
+
+            let mut buffer = Vec::new();
+            decoder.read_to_end(&mut buffer)?;
+
+            let nodes = parse_tree_object(buffer.as_slice())?;
+            for node in nodes {
+                if name_only {
+                    println!("{}", node.path);
+                } else {
+                    println!("{} {} {}", node.mode, node.hash, node.path);
+                }
+            }
         }
     }
     Ok(())
