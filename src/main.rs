@@ -1,6 +1,12 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use std::{fs, io::Read};
+use flate2::Compression;
+use sha1::{Digest, Sha1};
+use std::{
+    fs,
+    io::{Read, Write},
+    path::PathBuf,
+};
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -16,6 +22,11 @@ enum Command {
         #[clap(short)]
         print: bool,
         hash: String,
+    },
+    HashObject {
+        #[clap(short)]
+        write: bool,
+        file_path: PathBuf,
     },
 }
 
@@ -43,6 +54,28 @@ fn main() -> Result<()> {
                 .position(|c| c as u8 == 0x0)
                 .expect("null separator missed");
             print!("{}", &result[contect_start_index + 1..]);
+        }
+        Command::HashObject { write, file_path } => {
+            let file = std::fs::File::open(file_path)?;
+            let file_len = file.metadata()?;
+            let mut object_file = Vec::<u8>::new();
+            object_file.extend("blob".as_bytes());
+            object_file.push(b' ');
+            object_file.extend(file_len.len().to_string().as_bytes());
+            object_file.push(0x0);
+            let mut buf_reader = std::io::BufReader::new(file);
+            buf_reader.read_to_end(&mut object_file)?;
+
+            let mut hasher = Sha1::new();
+            hasher.update(&object_file);
+            let hash = hex::encode(hasher.finalize());
+            if write {
+                let file_path = format!(".git/objects/{}/{}", &hash[0..2], &hash[2..]);
+                let file = std::fs::File::create(&file_path)?;
+                let encoder = flate2::write::ZlibEncoder::new(file, Compression::default());
+                encoder.finish()?;
+            }
+            println!("{hash}");
         }
     }
     Ok(())
