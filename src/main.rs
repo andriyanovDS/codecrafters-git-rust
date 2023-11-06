@@ -1,14 +1,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use flate2::Compression;
-use sha1::{Digest, Sha1};
-use std::{
-    fs,
-    io::{Read, Write},
-    path::{Path, PathBuf},
-};
-use tree_object::parse_tree_object;
+use std::{fs, io::Read, path::PathBuf};
+use tree_object::{parse_tree_object, write_tree};
 
+use crate::hash_object::hash_object;
+
+mod hash_object;
 mod tree_object;
 
 #[derive(Parser, Debug)]
@@ -36,6 +33,7 @@ enum Command {
         name_only: bool,
         hash: String,
     },
+    WriteTree,
 }
 
 fn main() -> Result<()> {
@@ -64,31 +62,7 @@ fn main() -> Result<()> {
             print!("{}", &result[contect_start_index + 1..]);
         }
         Command::HashObject { write, file_path } => {
-            let file = std::fs::File::open(file_path)?;
-            let file_len = file.metadata()?;
-            let mut object_file = Vec::<u8>::new();
-            object_file.extend("blob".as_bytes());
-            object_file.push(b' ');
-            object_file.extend(file_len.len().to_string().as_bytes());
-            object_file.push(b'\x00');
-            let mut buf_reader = std::io::BufReader::new(file);
-            buf_reader.read_to_end(&mut object_file)?;
-
-            let mut hasher = Sha1::new();
-            hasher.update(&object_file);
-            let hash = hex::encode(hasher.finalize());
-            if write {
-                let directory = format!(".git/objects/{}", &hash[0..2]);
-                let file_path = format!("{}/{}", directory, &hash[2..]);
-                let directory_path = Path::new(directory.as_str());
-                if !directory_path.exists() {
-                    std::fs::create_dir(directory_path)?;
-                }
-                let file = std::fs::File::create(file_path)?;
-                let mut encoder = flate2::write::ZlibEncoder::new(file, Compression::none());
-                encoder.write_all(&object_file)?;
-                encoder.finish()?;
-            }
+            let hash = hash_object(&file_path, write)?;
             println!("{hash}");
         }
         Command::LsTree { name_only, hash } => {
@@ -109,6 +83,10 @@ fn main() -> Result<()> {
                     println!("{} {} {}", node.mode, node.hash, node.path);
                 }
             }
+        }
+        Command::WriteTree => {
+            let hash = write_tree(&std::env::current_dir()?)?;
+            println!("{hash}");
         }
     }
     Ok(())
