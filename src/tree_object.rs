@@ -92,23 +92,13 @@ pub fn write_tree(path: &PathBuf) -> Result<String> {
 }
 
 pub fn parse_tree_object(buf: &[u8]) -> Result<Vec<TreeNode>> {
-    let mut iter = buf.iter();
+    let (mut buf, header) = ObjectHeader::parse_bytes(buf)?;
 
-    let header_end_position = iter
-        .position(|b| *b == b'\x00')
-        .expect("null separator missed");
-
-    let (object_type, _) = std::str::from_utf8(&buf[0..header_end_position])?
-        .split_once(' ')
-        .ok_or(Error::msg("Invalid node"))?;
-
-    if object_type != "tree" {
+    if header.object_type == ObjectType::Tree {
         return Err(Error::msg("fatal: not a tree object"));
     }
 
     let mut nodes = vec![];
-    let mut buf = &buf[header_end_position + 1..];
-
     while !buf.is_empty() {
         let (rest, node) = TreeNode::parse(buf)?;
         nodes.push(node);

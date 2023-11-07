@@ -6,9 +6,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[derive(Debug)]
 pub struct ObjectHeader {
-    object_type: ObjectType,
-    length: u64,
+    pub object_type: ObjectType,
+    pub length: u64,
 }
 
 impl ObjectHeader {
@@ -18,6 +19,41 @@ impl ObjectHeader {
             length,
         }
     }
+
+    pub fn parse_bytes(buf: &[u8]) -> Result<(&[u8], ObjectHeader)> {
+        let header_end_position = buf
+            .iter()
+            .position(|b| *b == 0)
+            .expect("null separator missed");
+
+        let (object_type, length) = std::str::from_utf8(&buf[0..header_end_position])?
+            .split_once(' ')
+            .ok_or(Error::msg("Invalid node"))?;
+
+        let header = ObjectHeader {
+            object_type: object_type.into(),
+            length: length.parse()?,
+        };
+        Ok((&buf[header_end_position + 1..], header))
+    }
+
+    pub fn parse_str(buf: &str) -> Result<(&str, ObjectHeader)> {
+        let header_end_position = buf
+            .chars()
+            .position(|b| b == '\x00')
+            .expect("null separator missed");
+
+        let (object_type, length) = buf[0..header_end_position]
+            .split_once(' ')
+            .ok_or(Error::msg("Invalid node"))?;
+
+        let header = ObjectHeader {
+            object_type: object_type.into(),
+            length: length.parse()?,
+        };
+        Ok((&buf[header_end_position + 1..], header))
+    }
+
     pub fn write<W: Write>(&self, buf: &mut W) -> Result<()> {
         self.object_type.write(buf)?;
         buf.write_all(&[b' '])?;
@@ -26,18 +62,38 @@ impl ObjectHeader {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum ObjectType {
     Blob,
     Tree,
+    Commit,
 }
 
 impl ObjectType {
     fn write<W: Write>(&self, buf: &mut W) -> Result<()> {
-        let str = match self {
+        let str: &'static str = self.into();
+        buf.write_all(str.as_bytes()).map_err(Error::from)
+    }
+}
+
+impl Into<&'static str> for &ObjectType {
+    fn into(self) -> &'static str {
+        match self {
             ObjectType::Blob => "blob",
             ObjectType::Tree => "tree",
-        };
-        buf.write_all(str.as_bytes()).map_err(Error::from)
+            ObjectType::Commit => "commit",
+        }
+    }
+}
+
+impl<'a> From<&'a str> for ObjectType {
+    fn from(value: &'a str) -> Self {
+        match value {
+            "blob" => ObjectType::Blob,
+            "tree" => ObjectType::Tree,
+            "commit" => ObjectType::Commit,
+            _ => panic!("Unexpected object type {value:?}"),
+        }
     }
 }
 

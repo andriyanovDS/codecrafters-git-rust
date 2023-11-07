@@ -1,10 +1,12 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use commit_object::CommitObject;
 use std::{fs, io::Read, path::PathBuf};
 use tree_object::{parse_tree_object, write_tree};
 
 use crate::hash_object::hash_object;
 
+mod commit_object;
 mod hash_object;
 mod tree_object;
 
@@ -34,6 +36,13 @@ enum Command {
         hash: String,
     },
     WriteTree,
+    CommitTree {
+        tree_hash: String,
+        #[clap(short)]
+        parent_hash: Option<String>,
+        #[clap(short)]
+        message: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -87,6 +96,14 @@ fn main() -> Result<()> {
         Command::WriteTree => {
             let hash = write_tree(&std::env::current_dir()?)?;
             println!("{hash}");
+        }
+        Command::CommitTree {
+            tree_hash,
+            parent_hash,
+            message,
+        } => {
+            let commit_hash = CommitObject::new(tree_hash, parent_hash, message).write()?;
+            println!("{commit_hash:?}");
         }
     }
     Ok(())
