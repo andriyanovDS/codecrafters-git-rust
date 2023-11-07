@@ -2,9 +2,10 @@ use crate::hash_object::{Object, ObjectHeader, ObjectType};
 use anyhow::{Error, Result};
 use sha1::{Digest, Sha1};
 use std::io::{Read, Write};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-const AUTHOR_NAME: &str = "dandriyanov@intermedia.com";
-const AUTHOR_EMAIL: &str = "dandriyanov";
+const AUTHOR_NAME: &str = "test";
+const AUTHOR_EMAIL: &str = "test@test.com";
 
 #[derive(Debug)]
 struct CommitAuthor {
@@ -16,7 +17,6 @@ struct CommitAuthor {
 
 impl CommitAuthor {
     fn parse(buf: &str) -> Result<Self> {
-        println!("line: {buf:?}");
         let mut parts = buf.split(' ');
         let name = parts.next().ok_or(Error::msg("Name missed."))?;
         let email = parts.next().ok_or(Error::msg("Email missed."))?;
@@ -48,11 +48,15 @@ impl CommitAuthor {
 
 impl Default for CommitAuthor {
     fn default() -> Self {
+        let unixtime = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("expected system time")
+            .as_secs();
         Self {
             name: AUTHOR_NAME.to_string(),
             email: AUTHOR_EMAIL.to_string(),
-            timestamp: "1699302041".to_string(),
-            timezone: "+0400".to_string(),
+            timestamp: unixtime.to_string(),
+            timezone: "+0000".to_string(),
         }
     }
 }
@@ -123,6 +127,8 @@ impl CommitObject {
 
     pub fn write(&self) -> Result<String> {
         let mut content = Vec::<u8>::new();
+
+        content.write_all("tree ".as_bytes())?;
         content.write_all(self.tree_hash.as_bytes())?;
         for parent_hash in self.parent_hashes.iter() {
             content.write_all(&[b'\n'])?;
