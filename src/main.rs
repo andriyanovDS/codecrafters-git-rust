@@ -103,7 +103,7 @@ fn main() -> Result<()> {
             message,
         } => {
             let commit_hash = CommitObject::new(tree_hash, parent_hash, message).write()?;
-            println!("{commit_hash:?}");
+            println!("{commit_hash}");
         }
     }
     Ok(())
