@@ -94,7 +94,7 @@ pub fn write_tree(path: &PathBuf) -> Result<String> {
 pub fn parse_tree_object(buf: &[u8]) -> Result<Vec<TreeNode>> {
     let (mut buf, header) = ObjectHeader::parse_bytes(buf)?;
 
-    if header.object_type == ObjectType::Tree {
+    if header.object_type != ObjectType::Tree {
         return Err(Error::msg("fatal: not a tree object"));
     }
 
