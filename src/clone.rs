@@ -68,7 +68,7 @@ impl TryFrom<Vec<Message>> for LsRefsResponse {
 #[derive(Debug)]
 struct Message(Vec<Bytes>);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Ref {
     hash: String,
     name: String,
@@ -145,8 +145,10 @@ pub fn clone(repo_url: String, destination_dir: PathBuf) -> Result<()> {
         &destination_dir,
     )?;
     write_refs(&ls_refs_response.refs, &destination_dir)?;
-    let commit_object = CommitObject::parse(head_hash(&ls_refs_response.refs), &destination_dir)?;
-    checkout_tree(commit_object.tree_hash.as_str(), &destination_dir)
+    let head_ref = head_ref(&ls_refs_response.refs);
+    let commit_object = CommitObject::parse(&head_ref.hash.as_str(), &destination_dir)?;
+    checkout_tree(commit_object.tree_hash.as_str(), &destination_dir)?;
+    write_config(head_ref.name.as_str(), destination_dir)
 }
 
 fn checkout_tree(hash: &str, destination_dir: &PathBuf) -> Result<()> {
@@ -168,18 +170,47 @@ fn checkout_tree(hash: &str, destination_dir: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn head_hash(refs: &[Ref]) -> &str {
+fn write_config<P: AsRef<Path>>(head_ref: &str, destination_dir: P) -> Result<()> {
+    let branch = head_ref
+        .rsplit_once('/')
+        .expect("Incorrect HEAD ref")
+        .1
+        .trim();
+    let write_data = format_config(head_ref.as_ref(), branch, &head_ref);
+    let mut config_file = std::fs::File::create(destination_dir.as_ref().join(".git/config"))?;
+    config_file
+        .write_all(write_data.as_bytes())
+        .map_err(Error::from)
+}
+
+fn format_config(repo_url: &str, branch: &str, head_ref: &str) -> String {
+    format!(
+        "[core]
+\trepositoryformatversion = 0
+\tfilemode = true
+\tbare = false
+\tlogallrefupdates = true
+[remote \"origin\"]
+\turl = {repo_url}
+\tfetch = +refs/heads/*:refs/remotes/origin/*
+[branch \"{branch}\"]
+\tremote = origin
+\tmerge = {head_ref}\n"
+    )
+}
+
+fn head_ref(refs: &[Ref]) -> Ref {
     let mut iter = refs.into_iter();
     let head_ref = iter.next().expect("HEAD ref does not exist.");
 
     iter.find_map(|git_ref| {
-        if head_ref.name == git_ref.hash {
-            Some(git_ref.hash.as_str())
+        if head_ref.hash == git_ref.hash {
+            Some(git_ref.clone())
         } else {
             None
         }
     })
-    .unwrap_or(head_ref.hash.as_str())
+    .unwrap_or(head_ref.clone())
 }
 
 fn write_refs<P: AsRef<Path>>(refs: &[Ref], destination_dir: P) -> Result<()> {
@@ -189,7 +220,7 @@ fn write_refs<P: AsRef<Path>>(refs: &[Ref], destination_dir: P) -> Result<()> {
         .ok_or_else(|| Error::msg("HEAD ref does not exist."))?;
 
     for git_ref in iter {
-        if git_ref.name == head_ref.hash {
+        if git_ref.hash == head_ref.hash {
             println!("Write head");
             let mut head_file = std::fs::File::create(destination_dir.as_ref().join(".git/HEAD"))?;
             head_file.write_all(format!("ref: {}\n", git_ref.name).as_bytes())?;

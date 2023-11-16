@@ -62,7 +62,7 @@ fn main() -> Result<()> {
         }
         Command::CatFile { print: _, hash } => {
             let object = read_object(hash.as_str(), ".")?;
-            let (content, header) = ObjectHeader::parse_bytes(object.as_slice())?;
+            let (content, _) = ObjectHeader::parse_bytes(object.as_slice())?;
             println!("{}", String::from_utf8_lossy(content));
         }
         Command::HashObject { write, file_path } => {

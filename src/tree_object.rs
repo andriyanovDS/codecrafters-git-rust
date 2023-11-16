@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    io::{Read, Write},
+    io::Write,
     os::unix::prelude::PermissionsExt,
     path::{Path, PathBuf},
 };
