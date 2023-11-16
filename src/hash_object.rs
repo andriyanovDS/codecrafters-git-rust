@@ -155,3 +155,20 @@ pub fn make_object_path<P: AsRef<Path>>(hash: &str, root_dir: P) -> Result<PathB
     }
     Ok(file_path)
 }
+
+pub fn read_object<P: AsRef<Path>>(hash: &str, target_dir: P) -> Result<Vec<u8>> {
+    let directory = &hash[0..2];
+    let file_name = &hash[2..];
+    let file_path = target_dir
+        .as_ref()
+        .join(".git/objects")
+        .join(directory)
+        .join(file_name);
+
+    let file_content = std::fs::read(file_path)?;
+    let mut decoder = flate2::read::ZlibDecoder::new(file_content.as_slice());
+    let mut buffer = Vec::new();
+    decoder.read_to_end(&mut buffer)?;
+
+    Ok(buffer)
+}

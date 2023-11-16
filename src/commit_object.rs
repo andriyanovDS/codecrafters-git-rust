@@ -2,13 +2,14 @@ use crate::hash_object::{Object, ObjectHeader, ObjectType};
 use anyhow::{Error, Result};
 use sha1::{Digest, Sha1};
 use std::io::{Read, Write};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const AUTHOR_NAME: &str = "test";
 const AUTHOR_EMAIL: &str = "test@test.com";
 
 #[derive(Debug)]
-struct CommitAuthor {
+pub struct CommitAuthor {
     name: String,
     email: String,
     timestamp: String,
@@ -63,11 +64,11 @@ impl Default for CommitAuthor {
 
 #[derive(Debug)]
 pub struct CommitObject {
-    tree_hash: String,
-    parent_hashes: Vec<String>,
-    author: CommitAuthor,
-    commiter: CommitAuthor,
-    message: String,
+    pub tree_hash: String,
+    pub parent_hashes: Vec<String>,
+    pub author: CommitAuthor,
+    pub commiter: CommitAuthor,
+    pub message: String,
 }
 
 impl CommitObject {
@@ -81,11 +82,15 @@ impl CommitObject {
         }
     }
 
-    pub fn parse(hash: String) -> Result<Self> {
+    pub fn parse<P: AsRef<Path>>(hash: &str, target_dir: P) -> Result<Self> {
         let content = {
             let directory = &hash[0..2];
             let file_name = &hash[2..];
-            let file_path = format!(".git/objects/{}/{}", directory, file_name);
+            let file_path = target_dir
+                .as_ref()
+                .join(".git/objects")
+                .join(directory)
+                .join(file_name);
             let file_content = std::fs::read(file_path)?;
             let mut decoder = flate2::read::ZlibDecoder::new(file_content.as_slice());
             let mut buffer = String::new();
@@ -99,7 +104,10 @@ impl CommitObject {
         let mut lines = file_content.lines();
         let tree_hash = lines
             .next()
-            .expect("Tree hash must be first in commit object.");
+            .expect("Tree hash must be first in commit object.")
+            .split_once(' ')
+            .expect("Tree hash must be separated by whitespace.")
+            .1;
         let mut parent_hashes = Vec::<String>::new();
         let author = loop {
             let line = lines.next().ok_or(Error::msg("Author missed"))?;
@@ -117,7 +125,7 @@ impl CommitObject {
 
         let message = lines.nth(1).ok_or(Error::msg("Message missed"))?;
         Ok(Self {
-            tree_hash: tree_hash.to_string(),
+            tree_hash: tree_hash.into(),
             parent_hashes,
             author,
             commiter,

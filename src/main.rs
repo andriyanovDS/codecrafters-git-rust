@@ -3,10 +3,10 @@ use clap::{Parser, Subcommand};
 use clone::clone;
 use commit_object::CommitObject;
 use repo::init_repo;
-use std::{fs, io::Read, path::PathBuf};
-use tree_object::{parse_tree_object, write_tree};
+use std::path::PathBuf;
+use tree_object::{write_tree, TreeNode};
 
-use crate::hash_object::hash_object;
+use crate::hash_object::{hash_object, read_object, ObjectHeader};
 
 mod clone;
 mod commit_object;
@@ -61,35 +61,16 @@ fn main() -> Result<()> {
             println!("Initialized git directory")
         }
         Command::CatFile { print: _, hash } => {
-            let directory = &hash[0..2];
-            let file_name = &hash[2..];
-            let file_path = format!(".git/objects/{}/{}", directory, file_name);
-            let file_content = fs::read(file_path)?;
-            let mut decoder = flate2::read::ZlibDecoder::new(file_content.as_slice());
-
-            let mut result = String::new();
-            decoder.read_to_string(&mut result)?;
-            let contect_start_index = result
-                .chars()
-                .position(|c| c as u8 == 0x0)
-                .expect("null separator missed");
-            print!("{}", &result[contect_start_index + 1..]);
+            let object = read_object(hash.as_str(), ".")?;
+            let (content, header) = ObjectHeader::parse_bytes(object.as_slice())?;
+            println!("{}", String::from_utf8_lossy(content));
         }
         Command::HashObject { write, file_path } => {
             let hash = hash_object(&file_path, write)?;
             println!("{hash}");
         }
         Command::LsTree { name_only, hash } => {
-            let directory = &hash[0..2];
-            let file_name = &hash[2..];
-            let file_path = format!(".git/objects/{}/{}", directory, file_name);
-            let file_content = fs::read(&file_path)?;
-            let mut decoder = flate2::read::ZlibDecoder::new(file_content.as_slice());
-
-            let mut buffer = Vec::new();
-            decoder.read_to_end(&mut buffer)?;
-
-            let nodes = parse_tree_object(buffer.as_slice())?;
+            let nodes = TreeNode::read(hash.as_str(), ".")?;
             for node in nodes {
                 if name_only {
                     println!("{}", node.path);

@@ -12,6 +12,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::commit_object::CommitObject;
+use crate::tree_object::TreeNode;
 use crate::{
     hash_object::{Object, ObjectHeader, ObjectType},
     repo::init_repo,
@@ -134,7 +136,6 @@ pub fn clone(repo_url: String, destination_dir: PathBuf) -> Result<()> {
     // init_repo(&destination_dir)?;
     let url = Url::parse(format!("{repo_url}/info/refs?service=git-upload-pack").as_str())?;
     let ls_refs_response = ls_refs(url)?;
-    println!("Messages: {ls_refs_response:?}");
 
     let url = Url::parse(format!("{repo_url}/git-upload-pack").as_str())?;
     fetch(
@@ -144,7 +145,41 @@ pub fn clone(repo_url: String, destination_dir: PathBuf) -> Result<()> {
         &destination_dir,
     )?;
     write_refs(&ls_refs_response.refs, &destination_dir)?;
+    let commit_object = CommitObject::parse(head_hash(&ls_refs_response.refs), &destination_dir)?;
+    checkout_tree(commit_object.tree_hash.as_str(), &destination_dir)
+}
+
+fn checkout_tree(hash: &str, destination_dir: &PathBuf) -> Result<()> {
+    let tree_nodes = TreeNode::read(hash, &destination_dir)?;
+    for node in tree_nodes {
+        let object = read_object(node.hash.as_str(), &destination_dir)?;
+        let (content, header) = ObjectHeader::parse_bytes(object.as_slice())?;
+        match header.object_type {
+            ObjectType::Blob => {
+                let mut file = std::fs::File::create(destination_dir.join(node.path))?;
+                file.write_all(content)?;
+            }
+            ObjectType::Tree => {
+                checkout_tree(node.hash.as_str(), &destination_dir)?;
+            }
+            ObjectType::Commit => return Err(Error::msg("Unexpected object type.")),
+        }
+    }
     Ok(())
+}
+
+fn head_hash(refs: &[Ref]) -> &str {
+    let mut iter = refs.into_iter();
+    let head_ref = iter.next().expect("HEAD ref does not exist.");
+
+    iter.find_map(|git_ref| {
+        if head_ref.name == git_ref.hash {
+            Some(git_ref.hash.as_str())
+        } else {
+            None
+        }
+    })
+    .unwrap_or(head_ref.hash.as_str())
 }
 
 fn write_refs<P: AsRef<Path>>(refs: &[Ref], destination_dir: P) -> Result<()> {
@@ -154,7 +189,8 @@ fn write_refs<P: AsRef<Path>>(refs: &[Ref], destination_dir: P) -> Result<()> {
         .ok_or_else(|| Error::msg("HEAD ref does not exist."))?;
 
     for git_ref in iter {
-        if git_ref.hash == head_ref.hash {
+        if git_ref.name == head_ref.hash {
+            println!("Write head");
             let mut head_file = std::fs::File::create(destination_dir.as_ref().join(".git/HEAD"))?;
             head_file.write_all(format!("ref: {}\n", git_ref.name).as_bytes())?;
         } else {
@@ -172,7 +208,6 @@ fn write_refs<P: AsRef<Path>>(refs: &[Ref], destination_dir: P) -> Result<()> {
             ref_file.write_all(&[b'\n'])?;
         }
     }
-
     Ok(())
 }
 

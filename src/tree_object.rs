@@ -1,17 +1,22 @@
-use std::{borrow::Cow, io::Write, os::unix::prelude::PermissionsExt, path::PathBuf};
+use std::{
+    borrow::Cow,
+    io::{Read, Write},
+    os::unix::prelude::PermissionsExt,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Error, Result};
 use sha1::{Digest, Sha1};
 
-use crate::hash_object::{hash_object, Object, ObjectHeader, ObjectType};
+use crate::hash_object::{hash_object, read_object, Object, ObjectHeader, ObjectType};
 
-pub struct TreeNode<'a> {
+pub struct TreeNode {
     pub hash: String,
     pub path: String,
-    pub mode: Cow<'a, str>,
+    pub mode: String,
 }
 
-impl<'a> TreeNode<'a> {
+impl TreeNode {
     fn parse(buf: &[u8]) -> Result<(&[u8], TreeNode)> {
         let separator_index = buf
             .iter()
@@ -28,9 +33,14 @@ impl<'a> TreeNode<'a> {
             TreeNode {
                 path: path.to_string(),
                 hash,
-                mode: Cow::Borrowed(mode),
+                mode: mode.into(),
             },
         ))
+    }
+
+    pub fn read<P: AsRef<Path>>(hash: &str, target_dir: P) -> Result<Vec<TreeNode>> {
+        let content = read_object(hash, target_dir)?;
+        parse_tree_object(content.as_slice())
     }
 
     fn write<W>(&self, dst: &mut W) -> Result<()>
@@ -66,7 +76,7 @@ pub fn write_tree(path: &PathBuf) -> Result<String> {
             hash_object(&path, false)?
         };
         nodes.push(TreeNode {
-            mode,
+            mode: mode.into(),
             path: file_name,
             hash,
         });
@@ -92,7 +102,7 @@ pub fn write_tree(path: &PathBuf) -> Result<String> {
     object.write()
 }
 
-pub fn parse_tree_object(buf: &[u8]) -> Result<Vec<TreeNode>> {
+fn parse_tree_object(buf: &[u8]) -> Result<Vec<TreeNode>> {
     let (mut buf, header) = ObjectHeader::parse_bytes(buf)?;
 
     if header.object_type != ObjectType::Tree {
