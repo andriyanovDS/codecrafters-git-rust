@@ -87,6 +87,7 @@ pub fn write_tree(path: &PathBuf) -> Result<String> {
         header,
         hash,
         content,
+        root_dir: ".".into(),
     };
     object.write()
 }

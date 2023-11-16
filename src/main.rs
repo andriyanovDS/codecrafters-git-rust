@@ -1,13 +1,17 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use clone::clone;
 use commit_object::CommitObject;
+use repo::init_repo;
 use std::{fs, io::Read, path::PathBuf};
 use tree_object::{parse_tree_object, write_tree};
 
 use crate::hash_object::hash_object;
 
+mod clone;
 mod commit_object;
 mod hash_object;
+mod repo;
 mod tree_object;
 
 #[derive(Parser, Debug)]
@@ -43,16 +47,17 @@ enum Command {
         #[clap(short)]
         message: String,
     },
+    Clone {
+        repo_url: String,
+        detination_path: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Init => {
-            fs::create_dir(".git")?;
-            fs::create_dir(".git/objects")?;
-            fs::create_dir(".git/refs")?;
-            fs::write(".git/HEAD", "ref: refs/heads/master\n")?;
+            init_repo(".")?;
             println!("Initialized git directory")
         }
         Command::CatFile { print: _, hash } => {
@@ -105,6 +110,10 @@ fn main() -> Result<()> {
             let commit_hash = CommitObject::new(tree_hash, parent_hash, message).write()?;
             println!("{commit_hash}");
         }
+        Command::Clone {
+            repo_url,
+            detination_path,
+        } => clone(repo_url, detination_path)?,
     }
     Ok(())
 }

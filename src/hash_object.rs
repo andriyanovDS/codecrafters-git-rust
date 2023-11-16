@@ -101,11 +101,12 @@ pub struct Object {
     pub header: ObjectHeader,
     pub hash: String,
     pub content: Vec<u8>,
+    pub root_dir: PathBuf,
 }
 
 impl Object {
     pub fn write(self) -> Result<String> {
-        let file_path = make_object_path(self.hash.as_str())?;
+        let file_path = make_object_path(self.hash.as_str(), self.root_dir)?;
         let file = std::fs::File::create(file_path)?;
         let mut encoder = flate2::write::ZlibEncoder::new(file, Compression::none());
         self.header.write(&mut encoder)?;
@@ -135,6 +136,7 @@ pub fn hash_object(file_path: &PathBuf, write: bool) -> Result<String> {
         header,
         hash,
         content,
+        root_dir: ".".into(),
     };
     if write {
         object.write()
@@ -143,12 +145,13 @@ pub fn hash_object(file_path: &PathBuf, write: bool) -> Result<String> {
     }
 }
 
-pub fn make_object_path(hash: &str) -> Result<String> {
-    let directory = format!(".git/objects/{}", &hash[0..2]);
-    let file_path = format!("{}/{}", directory, &hash[2..]);
-    let directory_path = Path::new(directory.as_str());
-    if !directory_path.exists() {
-        std::fs::create_dir(directory_path)?;
+pub fn make_object_path<P: AsRef<Path>>(hash: &str, root_dir: P) -> Result<PathBuf> {
+    let objects_dir = root_dir.as_ref().join(".git/objects");
+    let directory = objects_dir.join(&hash[0..2]);
+    let file_path = directory.join(&hash[2..]);
+    // println!("Write to dir: {file_path:?}");
+    if !directory.exists() {
+        std::fs::create_dir(directory)?;
     }
     Ok(file_path)
 }

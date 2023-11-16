@@ -155,6 +155,7 @@ impl CommitObject {
             header,
             hash,
             content,
+            root_dir: ".".into(),
         };
         object.write()
     }
