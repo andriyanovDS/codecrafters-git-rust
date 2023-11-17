@@ -10,6 +10,7 @@ use sha1::{Digest, Sha1};
 
 use crate::hash_object::{hash_object, read_object, Object, ObjectHeader, ObjectType};
 
+#[derive(Debug)]
 pub struct TreeNode {
     pub hash: String,
     pub path: String,

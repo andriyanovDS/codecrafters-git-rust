@@ -148,11 +148,12 @@ pub fn clone(repo_url: String, destination_dir: PathBuf) -> Result<()> {
     let head_ref = head_ref(&ls_refs_response.refs);
     let commit_object = CommitObject::parse(&head_ref.hash.as_str(), &destination_dir)?;
     checkout_tree(commit_object.tree_hash.as_str(), &destination_dir)?;
-    write_config(head_ref.name.as_str(), destination_dir)
+    write_config(repo_url.as_str(), head_ref.name.as_str(), destination_dir)
 }
 
 fn checkout_tree(hash: &str, destination_dir: &PathBuf) -> Result<()> {
     let tree_nodes = TreeNode::read(hash, &destination_dir)?;
+    println!("Checkout tree. Nodes: {:?}", tree_nodes);
     for node in tree_nodes {
         let object = read_object(node.hash.as_str(), &destination_dir)?;
         let (content, header) = ObjectHeader::parse_bytes(object.as_slice())?;
@@ -170,13 +171,13 @@ fn checkout_tree(hash: &str, destination_dir: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn write_config<P: AsRef<Path>>(head_ref: &str, destination_dir: P) -> Result<()> {
+fn write_config<P: AsRef<Path>>(repo_url: &str, head_ref: &str, destination_dir: P) -> Result<()> {
     let branch = head_ref
         .rsplit_once('/')
         .expect("Incorrect HEAD ref")
         .1
         .trim();
-    let write_data = format_config(head_ref.as_ref(), branch, &head_ref);
+    let write_data = format_config(repo_url, branch, &head_ref);
     let mut config_file = std::fs::File::create(destination_dir.as_ref().join(".git/config"))?;
     config_file
         .write_all(write_data.as_bytes())
