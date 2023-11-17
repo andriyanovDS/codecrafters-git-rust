@@ -133,6 +133,9 @@ impl SpecialPacket {
 }
 
 pub fn clone(repo_url: String, destination_dir: PathBuf) -> Result<()> {
+    if destination_dir.as_path().exists() {
+        std::fs::remove_dir_all(&destination_dir)?;
+    }
     init_repo(&destination_dir)?;
     println!("Repo Url: {repo_url:?}. destination: {:?}", destination_dir);
     let url = Url::parse(format!("{repo_url}/info/refs?service=git-upload-pack").as_str())?;
@@ -148,22 +151,28 @@ pub fn clone(repo_url: String, destination_dir: PathBuf) -> Result<()> {
     write_refs(&ls_refs_response.refs, &destination_dir)?;
     let head_ref = head_ref(&ls_refs_response.refs);
     let commit_object = CommitObject::parse(&head_ref.hash.as_str(), &destination_dir)?;
-    checkout_tree(commit_object.tree_hash.as_str(), &destination_dir)?;
+    checkout_tree(
+        commit_object.tree_hash.as_str(),
+        &destination_dir,
+        &destination_dir,
+    )?;
     write_config(repo_url.as_str(), head_ref.name.as_str(), destination_dir)
 }
 
-fn checkout_tree(hash: &str, destination_dir: &PathBuf) -> Result<()> {
+fn checkout_tree(hash: &str, destination_dir: &PathBuf, tree_dir: &PathBuf) -> Result<()> {
     let tree_nodes = TreeNode::read(hash, &destination_dir)?;
     for node in tree_nodes {
         let object = read_object(node.hash.as_str(), &destination_dir)?;
         let (content, header) = ObjectHeader::parse_bytes(object.as_slice())?;
         match header.object_type {
             ObjectType::Blob => {
-                let mut file = std::fs::File::create(destination_dir.join(node.path))?;
+                let mut file = std::fs::File::create(tree_dir.join(node.path))?;
                 file.write_all(content)?;
             }
             ObjectType::Tree => {
-                checkout_tree(node.hash.as_str(), &destination_dir)?;
+                let tree_dir = tree_dir.join(node.path.as_str());
+                std::fs::create_dir(&tree_dir)?;
+                checkout_tree(node.hash.as_str(), &destination_dir, &tree_dir)?;
             }
             ObjectType::Commit => return Err(Error::msg("Unexpected object type.")),
         }
