@@ -80,8 +80,8 @@ impl<'a> From<Cow<'a, str>> for Ref {
             .split_once(' ')
             .expect("Hash and name separated by space.");
         Self {
-            hash: hash.into(),
-            name: name.into(),
+            hash: hash.trim().into(),
+            name: name.trim().into(),
         }
     }
 }
@@ -133,7 +133,7 @@ impl SpecialPacket {
 }
 
 pub fn clone(repo_url: String, destination_dir: PathBuf) -> Result<()> {
-    // init_repo(&destination_dir)?;
+    init_repo(&destination_dir)?;
     let url = Url::parse(format!("{repo_url}/info/refs?service=git-upload-pack").as_str())?;
     let ls_refs_response = ls_refs(url)?;
 
@@ -229,6 +229,7 @@ fn write_refs<P: AsRef<Path>>(refs: &[Ref], destination_dir: P) -> Result<()> {
                 .as_ref()
                 .join(".git")
                 .join(git_ref.name.as_str());
+
             let parent_dir = Path::new(&full_path)
                 .parent()
                 .ok_or_else(|| Error::msg("Failed to get parent dir."))?;
